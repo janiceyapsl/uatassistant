@@ -1,0 +1,5 @@
+[00:00:20] Joji: The approval should update the student's status.
+[00:00:32] Joji: When I click approve, nothing happens.
+[00:00:40] Del: The student is still pending. I can reproduce the same bug.
+[00:01:15] Myles: Could we add search by name or email to the student list?
+[00:01:33] Del: I'll follow up with the engineering team after this session.
