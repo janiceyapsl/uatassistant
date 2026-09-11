@@ -2,6 +2,10 @@
 
 Research date: 11 September 2026. Recommendation: prove evidence-linked issue review first; treat meeting capture and speaker attribution as independently replaceable adapters. The workflow is feasible. Reliable 30-speaker diarization from one mixed microphone is an evaluation question, not a solved requirement.
 
+## Implementation update: live shared meeting audio
+
+The prototype now includes a separate shared-audio capture path (`public/meeting.js`) and a server-side streaming proxy (`src/live.js`, using `ws`). Desktop browser tab/system audio plus an optional microphone are mixed with Web Audio and streamed continuously as WebM/Opus to Deepgram Nova-3 streaming diarization v1. The server keeps credentials private, validates origins, bounds WebSocket payloads/buffering and drains CloseStream before completion. Provider word offsets are added to the capture's session offset; anonymous speaker IDs are scoped to each connection. Errors stop capture visibly; users manually restart, so interruption gaps remain explicit. This is audio capture, not platform transcript access. Earlier roadmap references to a streaming adapter are now partially implemented; production capture pilot and accuracy validation remain outstanding. [Deepgram streaming API](https://developers.deepgram.com/reference/speech-to-text/listen-streaming), [browser capture support](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia)
+
 ## Capture and transcription choices
 
 | Component | Recommendation | Tradeoff / alternative |

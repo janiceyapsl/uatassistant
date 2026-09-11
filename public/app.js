@@ -1,6 +1,8 @@
 import {createSession,uid,time,nearestIssue,mergeIssues,report,classifications,statuses} from '/domain.js';
+import {MeetingCapture} from '/meeting.js';
 const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let session=createSession(),db,recognition,listening=false,reviewId,config={},queue=Promise.resolve(),busy=0;
+let meeting=null,meetingBusy=false;
 const notice=(text,error=false)=>{$('notice').textContent=text;$('notice').classList.toggle('error',error);};
 const elapsed=()=>Math.max(0,((session.endTime||Date.now())-session.startTime)/1000);
 async function api(path,body,headers={'Content-Type':'application/json'}){const r=await fetch(path,{method:'POST',headers,body:headers['Content-Type']==='application/json'?JSON.stringify(body):body});const result=await r.json();if(!r.ok)throw Error(result.error);return result;}
@@ -47,6 +49,7 @@ function addSegment(text,start=elapsed(),speakerId=$('speaker').value||'unknown'
 function download(name,text,type){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function stopMic(){const wasListening=listening, current=recognition;listening=false;const stopped=new Promise(resolve=>{if(!wasListening||!current)return resolve();const timer=setTimeout(()=>{current.abort();resolve();},3000);current.addEventListener('end',()=>{clearTimeout(timer);resolve();},{once:true});current.stop();});$('mic').textContent='● Start microphone';$('dot').classList.remove('live');render();return stopped;}
 $('mic').onclick=()=>{
+  if(meeting||meetingBusy){notice('Stop meeting capture before starting microphone-only mode.',true);return;}
   if(listening){stopMic();return;}
   if(session.endTime){notice('Create a new session to record again.',true);return;}
   const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -59,6 +62,32 @@ $('mic').onclick=()=>{
   recognition.onerror=e=>{notice(`Microphone transcription: ${e.error}. You can import a transcript instead.`,true);if(e.error!=='no-speech')stopMic();};
   recognition.onend=()=>{if(listening){try{recognition.start();}catch{stopMic();}}};
   try{recognition.start();listening=true;$('mic').textContent='■ Stop microphone';$('dot').classList.add('live');render();notice('Microphone active. Select the current speaker manually; timestamps are approximate.');}catch(e){notice(e.message,true);}
+};
+function meetingState(text){
+  $('meeting-status').textContent=text;
+  const active=text!=='Stopped';
+  $('meeting').textContent=active?'■ Stop meeting capture':'● Capture meeting audio';
+  $('dot').classList.toggle('live',active||listening);
+  for(const id of ['new','demo','import','audio','include-mic'])$(id).disabled=active;
+  if(!active){meeting=null;meetingBusy=false;}
+}
+$('meeting').onclick=async()=>{
+  if(meetingBusy)return;
+  if(meeting){await meeting.stop();return;}
+  if(listening)return notice('Stop microphone-only mode first.',true);
+  if(session.endTime)return notice('Create a new session before capturing a meeting.',true);
+  if(!config.audio)return notice('Live meeting capture needs DEEPGRAM_API_KEY in the local .env file. Set it and restart the server, then reload. Do not paste your key into the chat.',true);
+  if(!confirm('Stream shared meeting audio'+($('include-mic').checked?' and your microphone':'')+' to Deepgram for transcription? Confirm recording consent. Choose the meeting tab and enable Share tab audio. Screen video stays on your device.'))return;
+  meetingBusy=true;
+  const sessionId=session.id,namespace='live_'+uid().slice(0,8);
+  const capture=new MeetingCapture({includeMic:$('include-mic').checked,getOffset:elapsed,
+    onState:meetingState,onError:message=>notice(message,true),onInterim:text=>$('interim').textContent=text,
+    onSegment:s=>{if(session.id!==sessionId)return;const speakerId=namespace+'_'+s.speakerId;session.participants[speakerId]??=s.speakerId==='unknown'?'Unknown live speaker':`Live speaker ${Number(s.speakerId)+1}`;addSegment(s.text,s.start,speakerId,{end:s.end,source:'Live meeting audio · Deepgram'});}
+  });
+  meeting=capture;
+  try{await capture.start();notice('Live meeting audio is being transcribed. Use headphones to reduce echo. Rename speaker labels under Participants.');}
+  catch(e){notice(e.message,true);}
+  finally{meetingBusy=false;}
 };
 $('project').onchange=()=>{session.project=$('project').value.trim()||'Untitled UAT';save();};
 $('case-form').onsubmit=e=>{e.preventDefault();const t={id:uid(),title:$('case-name').value.trim(),status:'Pending'};if(!t.title)return;session.testCases.push(t);session.activeTestCase=t.id;$('case-name').value='';save();render();};
@@ -88,7 +117,7 @@ $('capture').onclick=async()=>{let stream;try{stream=await navigator.mediaDevice
 $('shots').onchange=e=>{const id=e.target.dataset.shotTime||e.target.dataset.shotLink,s=session.screenshots.find(s=>s.id===id);if(!s)return;if(e.target.dataset.shotTime){const t=Number(e.target.value);if(!Number.isFinite(t)||t<0)return;s.timestamp=t;if(!s.manual)s.issueId=nearestIssue(session.issues,t);}else{s.issueId=e.target.value||null;s.manual=true;}save();render();};
 $('shots').onclick=e=>{if(e.target.dataset.shotDelete){session.screenshots=session.screenshots.filter(s=>s.id!==e.target.dataset.shotDelete);save();render();}};
 $('backup').onclick=()=>download('uat-session.json',JSON.stringify(session,null,2),'application/json');
-$('finish').onclick=async()=>{$('finish').disabled=true;await stopMic();await queue;session.endTime=Date.now();save();render();download('uat-report.md',report(session),'text/markdown');$('finish').disabled=false;notice('Session finished. Report exported; JSON backup includes images and all review records.');};
+$('finish').onclick=async()=>{if(meetingBusy)return notice('Wait for meeting capture setup to finish first.');$('finish').disabled=true;await meeting?.stop();await stopMic();await queue;session.endTime=Date.now();save();render();download('uat-report.md',report(session),'text/markdown');$('finish').disabled=false;notice('Session finished. Report exported; JSON backup includes images and all review records.');};
 function replaceSession(next){stopMic();session=next;save();render();}
 $('new').onclick=()=>{if(!confirm('Start a new session? The current session will be downloaded as a backup first.'))return;download('uat-session-backup.json',JSON.stringify(session,null,2),'application/json');replaceSession(createSession());notice('New session ready. Add a project name and test cases.');};
 $('demo').onclick=async()=>{if(session.transcript.length&&!confirm('Replace this workspace with demo data? A backup will download first.'))return;if(session.transcript.length)download('uat-session-backup.json',JSON.stringify(session,null,2),'application/json');const s=createSession('Student portal · Acceptance testing');s.startTime=Date.now()-180000;s.participants={joji:'Joji',del:'Del',myles:'Myles'};s.testCases=['Student login','Student search','Student approval','Course assignment','Reporting'].map((title,i)=>({id:uid(),title,status:i<2?'Completed':'Pending'}));s.activeTestCase=s.testCases[2].id;const lines=[[20,'joji',"I'm opening the student record. The approval should update the student's status."],[32,'joji','When I click approve, nothing happens.'],[40,'del',"The student is still pending. I can reproduce the same bug."],[75,'myles','Could we add search by name or email to the student list?'],[93,'del',"I'll follow up with the engineering team after this session."]];s.transcript=lines.map(([start,speakerId,text])=>({id:uid(),start,end:start+5,speakerId,text,testCaseId:s.activeTestCase,source:'Demo fixture'}));replaceSession(s);await analyze(s.transcript);};
@@ -104,7 +133,7 @@ function validateBackup(s){
 }
 $('import').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>40*1024*1024)throw Error('Import limit is 40 MB');const raw=await file.text();if(file.name.endsWith('.json')){const next=validateBackup(JSON.parse(raw));if(!confirm('Replace this workspace with the backup? The current session will download first.'))return;download('uat-before-import.json',JSON.stringify(session,null,2),'application/json');replaceSession(next);notice('Session restored.');}else{const lines=raw.split(/\r?\n/).filter(s=>s.trim());const parsed=lines.map(line=>{const m=line.match(/^\[?(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)\]?\s*(?:—|-)??\s*([^:]+):\s*(.+)$/);if(!m||+m[2]>59||+m[3]>=60)throw Error('Each line must use [HH:MM:SS] Speaker: text');return {name:m[4].trim(),text:m[5],start:+m[1]*3600 + +m[2]*60 + +m[3]};});for(const row of parsed){let id=Object.keys(session.participants).find(id=>session.participants[id]===row.name);if(!id){id='speaker_'+uid();session.participants[id]=row.name;}session.transcript.push({id:uid(),start:row.start,end:row.start,speakerId:id,text:row.text,testCaseId:session.activeTestCase,source:'Imported TXT'});}session.transcript.sort((a,b)=>a.start-b.start);save();render();$('analyze').click();}}catch(e){notice(e.message,true);}finally{e.target.value='';}};
 $('audio').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(!config.audio)throw Error('Set DEEPGRAM_API_KEY in .env and restart the server first.');if(file.size>25*1024*1024)throw Error('Audio limit is 25 MB');if(!confirm('Send this audio to Deepgram for transcription and anonymous speaker labeling? Confirm participants have consented.'))return;const offset=prompt('Recording start offset in session seconds:','0');if(offset===null)return;if(!Number.isFinite(+offset)||+offset<0)throw Error('Invalid offset');const sessionId=session.id,testCaseId=session.activeTestCase;notice('Transcribing recording…');const result=await api('/api/transcribe',file,{'Content-Type':file.type||'application/octet-stream'});if(session.id!==sessionId)return;const recordingId=uid().slice(0,8);for(const s of result.segments){s.speakerId=recordingId+'_'+s.speakerId;session.participants[s.speakerId]??=s.speakerId;session.transcript.push({...s,start:s.start + +offset,end:s.end + +offset,id:uid(),testCaseId,source:'Deepgram recording'});}session.transcript.sort((a,b)=>a.start-b.start);save();render();$('analyze').click();if(!result.segments.length)notice('No speech was returned for this recording.',true);}catch(e){notice(e.message,true);}finally{e.target.value='';}};
-window.addEventListener('beforeunload',e=>{if(listening||busy){e.preventDefault();e.returnValue='';}});
+window.addEventListener('beforeunload',e=>{if(listening||busy||meeting||meetingBusy){e.preventDefault();e.returnValue='';}});
 setInterval(()=>$('clock').textContent=time(elapsed()),1000);
 try{db=await new Promise((resolve,reject)=>{const r=indexedDB.open('fieldnotes-uat',1);r.onupgradeneeded=()=>r.result.createObjectStore('sessions');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});const stored=await new Promise((resolve,reject)=>{const r=db.transaction('sessions').objectStore('sessions').get('current');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});if(stored)session=validateBackup(stored);}catch(e){notice('Local storage unavailable or saved data invalid. Use JSON backups. '+e.message,true);}
 try{config=await (await fetch('/api/config')).json();$('mode').querySelector('[value="ai"]').disabled=!config.ai;}catch{notice('Backend unavailable. Start the Node server.',true);}

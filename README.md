@@ -1,8 +1,9 @@
 # Fieldnotes — UAT Meeting Assistant
 
-A functional, local prototype of the UAT review workflow. Node 22+; no npm dependencies or build step.
+A functional, local prototype of the UAT review workflow. Node 22+; one WebSocket dependency and no build step.
 
 ```powershell
+npm ci
 npm start
 ```
 
@@ -22,6 +23,18 @@ Open http://127.0.0.1:3000 in Chrome or Edge. Select **Load demo** for an immedi
 
 ## Optional services
 
+### Live meeting audio (new)
+
+1. Copy `.env.example` to `.env`, set `DEEPGRAM_API_KEY` locally, then restart `npm start` and reload the page. Never commit or paste the key into chat.
+2. Open the assistant and your browser meeting in desktop Chrome or Edge. Obtain participants' recording consent.
+3. Click **Capture meeting audio**. In the browser chooser select the Zoom/Teams/Meet meeting tab and enable **Share tab audio**.
+4. Leave **Include my microphone** checked to include your own voice. Use headphones to minimize echo. If unchecked, only the selected source's audio is transcribed.
+5. Final transcript segments flow into issue detection. Rename anonymous **Live speaker** labels under Participants. Stop capture or finish the session to flush final words before exporting.
+
+This captures shared audio and creates a new live transcript; it does not read Zoom/Teams/Meet captions or join a meeting as a bot. Browser meeting tabs are the preferred path. Native desktop meetings require a screen/system-audio source supported by the browser and OS; window sharing often supplies no audio. The app rejects a selection with no audio track. System audio can include unrelated sounds, so select a meeting tab when possible. Screen video is needed for the browser sharing chooser but is never streamed to the server or Deepgram.
+
+Audio is mixed with the optional microphone, encoded as one continuous WebM/Opus stream, and sent through a local WebSocket proxy to Deepgram. The provider key stays server-side. Word timestamps are aligned to the capture start; speaker IDs stay within one stream and are namespaced on restart. Reconnect is manual and explicitly reported; gaps are not reconstructed. There is no raw-audio archive or guaranteed 30-speaker accuracy. The proxy is tested against a fake provider; actual meeting audio and Deepgram require a consented pilot with your key.
+
 Copy `.env.example` to `.env` and set only what you need. Restart the server after changes.
 
 For AI extraction, install Ollama separately, download a suitable instruction model and set `OLLAMA_MODEL` to its installed name. Default `OLLAMA_URL` is `http://127.0.0.1:11434`. Choose **Local AI · Ollama** in the interface. No automatic fallback hides AI errors; transcript stays available for retries. Model choice and accuracy require testing on your own UAT recordings.
@@ -30,11 +43,11 @@ Set `DEEPGRAM_API_KEY` to enable **Transcribe audio file**. Uploads (25 MB maxim
 
 ## Boundaries of this prototype
 
-Browser speech recognition is microphone-only in this implementation, may use a remote browser service, and does not diarize. It is not a direct Zoom/Teams/Meet connection. Use a meeting recording or exported transcript to prove the full multi-participant workflow. Browser support and microphone permissions vary; the Codex embedded preview may not support speech recognition.
+The separate **Start microphone** mode uses browser speech recognition, may use a remote browser service, and does not diarize. **Capture meeting audio** uses the new Deepgram streaming path described above. Browser support and microphone permissions vary; use desktop Chrome/Edge instead of the Codex embedded preview for real meetings.
 
 The rules detector is a transparent baseline, not semantic AI. It can miss issues, over-detect generic bug mentions, and does not resolve complex negation or cross-window references. AI mode can synthesize related turns but still needs human review. Evidence IDs are checked for existence; that does not guarantee that a model's claim is entailed by the evidence.
 
-No 30-speaker accuracy guarantee, production streaming provider, meeting bot, automatic test-case inference, ticket submission, authentication, multi-user database, or production privacy controls are included. Priority is manually editable and starts Unscored. Screenshots are retained locally and are not sent to the model. Full audio is not recorded by microphone mode.
+No 30-speaker accuracy guarantee, meeting bot, native caption integration, automatic test-case inference, ticket submission, authentication, multi-user database, or production privacy controls are included. Priority is manually editable and starts Unscored. Screenshots are retained locally and are not sent to the model. Raw audio is not archived.
 
 IndexedDB holds one active session per browser origin. New session/demo/restore downloads the old session first. Save JSON backups regularly; clearing browser data deletes the local copy. Use a single browser tab per session to avoid last-write-wins overwrites. Changing the host or port changes the browser storage origin.
 

@@ -2,9 +2,10 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {detect,materialize} from './src/domain.js';
+import {attachLive} from './src/live.js';
 
 const port=Number(process.env.PORT||3000);
-const files={'/':'public/index.html','/app.js':'public/app.js','/style.css':'public/style.css','/domain.js':'src/domain.js'};
+const files={'/':'public/index.html','/app.js':'public/app.js','/meeting.js':'public/meeting.js','/style.css':'public/style.css','/domain.js':'src/domain.js'};
 async function body(req,limit=2*1024*1024) {let size=0;const chunks=[];for await(const chunk of req){size+=chunk.length;if(size>limit)throw Error('Request too large');chunks.push(chunk);}return Buffer.concat(chunks);}
 const schema={type:'object',required:['issues'],properties:{issues:{type:'array',items:{type:'object',required:['classification','title','description','expectedBehaviour','actualBehaviour','evidenceIds'],properties:{classification:{type:'string',enum:['BUG','ENHANCEMENT','QUESTION','ACTION','OTHER']},title:{type:'string'},description:{type:'string'},expectedBehaviour:{type:'string'},actualBehaviour:{type:'string'},evidenceIds:{type:'array',items:{type:'string'}}}}}}};
 export const server=http.createServer(async(req,res)=>{
@@ -41,4 +42,5 @@ export const server=http.createServer(async(req,res)=>{
     send(404,{error:'Not found'});
   } catch(e){send(400,{error:e.message});}
 });
+attachLive(server,{port});
 server.listen(port,'127.0.0.1',()=>console.log(`UAT Assistant: http://127.0.0.1:${port}`));

@@ -1,5 +1,13 @@
 # Verification — 11 September 2026
 
+## Live meeting capture addition
+
+- `npm test`: 13 tests pass, including a real local WebSocket client/proxy/fake-provider integration test.
+- Verified binary audio relay, final transcript before stream completion, same-origin enforcement and missing-key rejection.
+- Word-level speaker changes retain source timestamps; interim results do not become permanent transcript segments.
+- No Deepgram key is configured here. Real speech accuracy, browser audio-sharing permissions, system audio support and microphone mixing remain unvalidated with live hardware/provider audio.
+- Browser verified the new capture button and microphone toggle; clicking capture without a key displays setup instructions without opening a capture permission prompt.
+
 ## Executed
 
 - `node --check public/app.js`, `node --check server.js`, `node --check src/domain.js` pass.
