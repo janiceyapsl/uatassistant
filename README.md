@@ -40,3 +40,7 @@ IndexedDB holds one active session per browser origin. New session/demo/restore 
 The server binds to loopback only, checks Host/Origin, serves an allowlist of files and limits request bodies. This is a single-user development application, not an authenticated production service. Do not expose it publicly. The repository is in a OneDrive folder: exported files saved there may sync through OneDrive.
 
 See [architecture and research](docs/architecture.md) for feasibility, vendor comparisons, privacy boundaries, implementation milestones, and the production repository proposal. See [verification](docs/verification.md) for executed checks and remaining validation.
+
+## AI issue extraction
+
+OpenRouter text-model extraction is available alongside rules and Ollama. Set OPENROUTER_TEXT_MODEL and use AI · OpenRouter. Test a sample first; Auto AI for new speech is off by default. See [setup and validation](docs/ai-extraction.md).

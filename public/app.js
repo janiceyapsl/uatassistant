@@ -32,10 +32,10 @@ function analyze(segments){
   queue=queue.then(async()=>{
     if(session.id!==sessionId)return;
     notice('Analyzing transcript evidence…');
-    const result=await api('/api/analyze',{segments,mode,testCases:session.testCases});
+    const result=await api('/api/analyze',{segments,mode,testCases:session.testCases,activeTestCase:session.activeTestCase,existingIssues:session.issues.slice(-200)});
     if(session.id!==sessionId)return;
     let count=0;
-    for(const i of result.issues){if(session.issues.some(old=>old.classification===i.classification&&old.evidenceIds.at(-1)===i.evidenceIds.at(-1)))continue;session.issues.push(i);count++;}
+    for(const i of result.issues){if(session.issues.some(old=>old.classification===i.classification&&((mode!=='openrouter'&&old.evidenceIds.at(-1)===i.evidenceIds.at(-1))||(old.title===i.title&&i.evidenceIds.every(id=>old.evidenceIds.includes(id))))))continue;session.issues.push(i);count++;}
     matchScreenshots();save();render();notice(`${count} new draft${count===1?'':'s'} detected. Review and confirm the evidence.`);
   }).catch(e=>notice(`Analysis failed: ${e.message}. Transcript retained; retry Analyze transcript.`,true)).finally(()=>busy--);
   return queue;
@@ -44,7 +44,8 @@ function addSegment(text,start=elapsed(),speakerId=$('speaker').value||'unknown'
   if(!text.trim())return;
   const s={id:uid(),start,end:start,speakerId,text:text.trim(),testCaseId:session.activeTestCase,source:'Manual',...extra};
   session.transcript.push(s);session.transcript.sort((a,b)=>a.start-b.start);save();render();
-  const index=session.transcript.indexOf(s);analyze(session.transcript.slice(Math.max(0,index-4),index+1));
+  if($('mode').value==='openrouter'&&!$('live-ai').checked)return;
+  const index=session.transcript.indexOf(s);analyze(session.transcript.slice(Math.max(0,index-11),index+1));
 }
 function download(name,text,type){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function stopMic(){const wasListening=listening, current=recognition;listening=false;const stopped=new Promise(resolve=>{if(!wasListening||!current)return resolve();const timer=setTimeout(()=>{current.abort();resolve();},3000);current.addEventListener('end',()=>{clearTimeout(timer);resolve();},{once:true});current.stop();});$('mic').textContent='● Start microphone';$('dot').classList.remove('live');render();return stopped;}
@@ -103,6 +104,8 @@ function review(id){
   $('fields').innerHTML=field('title','Title')+field('classification','Classification','',classifications)+field('status','Review status','',statuses)+field('description','Description','textarea')+field('expectedBehaviour','Expected behavior (leave blank if unstated)','textarea')+field('actualBehaviour','Actual behavior','textarea')+field('testCaseId','Test case','',[['','Unassigned'],...session.testCases.map(t=>[t.id,t.title])])+field('reportedBy','Reported by','',Object.entries(session.participants))+field('priority','Priority','',['Unscored','P0','P1','P2','P3']);
   $('evidence').textContent=i.source+'\n\n'+i.evidenceIds.map(id=>session.transcript.find(s=>s.id===id)).filter(Boolean).map(s=>`${time(s.start)} ${session.participants[s.speakerId]||s.speakerId}: ${s.text}`).join('\n\n');
   $('merge-target').innerHTML=options([['','Choose target'],...session.issues.filter(other=>other.id!==id&&!['Duplicate','Rejected'].includes(other.status)).map(other=>[other.id,other.title])],'');
+  $('ai-suggestions').textContent=[i.testCaseReason?'Test-case suggestion: '+i.testCaseReason:'',i.suggestedDuplicateOf?'Possible duplicate: '+(session.issues.find(other=>other.id===i.suggestedDuplicateOf)?.title||'Target no longer available')+'. '+i.duplicateReason:''].filter(Boolean).join('\n');
+  if(i.suggestedDuplicateOf)$('merge-target').value=i.suggestedDuplicateOf;
   $('review').showModal();
 }
 $('issues').onclick=e=>{if(e.target.dataset.review)review(e.target.dataset.review);};
@@ -136,5 +139,5 @@ $('audio').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{i
 window.addEventListener('beforeunload',e=>{if(listening||busy||meeting||meetingBusy){e.preventDefault();e.returnValue='';}});
 setInterval(()=>$('clock').textContent=time(elapsed()),1000);
 try{db=await new Promise((resolve,reject)=>{const r=indexedDB.open('fieldnotes-uat',1);r.onupgradeneeded=()=>r.result.createObjectStore('sessions');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});const stored=await new Promise((resolve,reject)=>{const r=db.transaction('sessions').objectStore('sessions').get('current');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});if(stored)session=validateBackup(stored);}catch(e){notice('Local storage unavailable or saved data invalid. Use JSON backups. '+e.message,true);}
-try{config=await (await fetch('/api/config')).json();$('mode').querySelector('[value="ai"]').disabled=!config.ai;}catch{notice('Backend unavailable. Start the Node server.',true);}
+try{config=await (await fetch('/api/config')).json();$('mode').querySelector('[value="ai"]').disabled=!config.ai;$('mode').querySelector('[value="openrouter"]').disabled=!config.openrouterAI;}catch{notice('Backend unavailable. Start the Node server.',true);}
 render();

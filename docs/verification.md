@@ -31,3 +31,9 @@
 - File chooser upload/download behavior end to end; report formatting is covered by the domain test and import/export code is implemented.
 
 Automated tests prove the tested data-flow invariants, not meeting-understanding accuracy. Use `sample-transcript.txt`, a consented recording and representative screenshots for the next pilot. No meeting was recorded and no client/student data was sent to an AI provider during development.
+
+## OpenRouter issue extraction — 12 September 2026
+
+21 tests pass. New coverage checks multi-speaker evidence, original reporter, test-case/duplicate IDs, supporting quotes, schema request/auth, and provider/refusal/truncation errors using mocked responses. Live model accuracy is not yet measured.
+
+Browser verified the OpenRouter analysis option and unchecked automatic-analysis control. The option remains disabled until key and text model are configured.
