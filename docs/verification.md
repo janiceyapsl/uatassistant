@@ -1,3 +1,7 @@
+## OpenRouter replacement — 12 September 2026
+
+16 automated tests pass, including OpenRouter request/auth handling, timestamps, failure handling, WAV encoding, worklet continuity and final flush, and ordered batches. No real provider key or microphone meeting was tested. Previous Deepgram streaming tests below describe the superseded implementation.
+
 # Verification — 11 September 2026
 
 ## Live meeting capture addition

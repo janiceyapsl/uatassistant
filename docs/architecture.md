@@ -1,3 +1,5 @@
+Current implementation (12 September 2026): OpenRouter has replaced the original Deepgram adapters. See [current STT architecture and setup](openrouter.md). The provider comparisons and earlier implementation notes below are historical research, not current configuration instructions.
+
 # Feasibility, research, and implementation plan
 
 Research date: 11 September 2026. Recommendation: prove evidence-linked issue review first; treat meeting capture and speaker attribution as independently replaceable adapters. The workflow is feasible. Reliable 30-speaker diarization from one mixed microphone is an evaluation question, not a solved requirement.
